@@ -59,6 +59,9 @@ private:
     Uint32 mElapsedTime;
     Uint32 mLastObjectSpawnTime;
 
+    std::vector<SDL_Rect> mObstacles; // Obstacles in the game
+    //void UpdateObstacles();
+    void CreateObstacle();
     
     void ProcessInput();
     void UpdateGame();
@@ -66,7 +69,20 @@ private:
     void StartScreen();
     void GameOver(bool win);
     void DisplayTitleScreen();
+    
 };
+
+// Create Obstacles
+void Game::CreateObstacle() {
+    for (int i = 0; i < 3; ++i) {
+        int x = rand() % SCREEN_WIDTH;
+        int y = rand() % SCREEN_HEIGHT;
+        SDL_Rect obstacle = { x, y, 30, 80 };
+        mObstacles.push_back(obstacle);
+    }
+}
+
+
 Game::Game()
         : mWindow(nullptr),
           mRenderer(nullptr),
@@ -105,6 +121,7 @@ bool Game::Initialize() {
 
     mPlayer = Player(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2);
 
+    CreateObstacle();
     // Create initial objects (Rectangles)
 //    for (int i = 0; i < 1; ++i) {// one for now
 //        int x = rand() % SCREEN_WIDTH;
@@ -204,19 +221,75 @@ void Game::UpdateGame() {
     Uint32 currentTime = SDL_GetTicks();
     float elapsedTime = (currentTime - mGameStartTime) / 1000.0f;
 
-    // Update game logic here
-    for (auto& objectRect : mObjects) {
-        float dx = mPlayer.position.x - objectRect.x;
-        float dy = mPlayer.position.y - objectRect.y;
+    // Check collisions with the Figures- FIX IT
+    auto it = mObjects.begin();
+    while (it != mObjects.end()) {
+        SDL_Rect& objectRect = *it;
+        float dx = mPlayer.position.x - (objectRect.x + objectRect.w / 2);
+        float dy = mPlayer.position.y - (objectRect.y + objectRect.h / 2);
         float distance = std::sqrt(dx * dx + dy * dy);
 
         if (distance < mPlayer.rect.w / 2 + objectRect.w / 2) {
-            // Collision with object
-            objectRect.x = SCREEN_WIDTH + 1; // Move the object outside the screen
-            objectRect.y = SCREEN_HEIGHT + 1; // Move the object outside the screen
+            // Collision with figure
+            it = mObjects.erase(it); // Remove the figure from the vector
             eatenFigues++;
+        } else {
+            ++it; // Move to the next figure
         }
     }
+
+    // Check collisions with the Obstacles
+    for (auto& obstacle : mObstacles) {
+        // Calculate the half-widths and half-heights of the player and obstacle
+        float playerHalfWidth = mPlayer.rect.w / 2.0f;
+        float playerHalfHeight = mPlayer.rect.h / 2.0f;
+        float obstacleHalfWidth = obstacle.w / 2.0f;
+        float obstacleHalfHeight = obstacle.h / 2.0f;
+
+        // Calculate the centers of the player and obstacle
+        float playerCenterX = mPlayer.position.x + playerHalfWidth;
+        float playerCenterY = mPlayer.position.y + playerHalfHeight;
+        float obstacleCenterX = obstacle.x + obstacleHalfWidth;
+        float obstacleCenterY = obstacle.y + obstacleHalfHeight;
+
+        // Calculate the distances between the centers of the player and obstacle
+        float deltaX = playerCenterX - obstacleCenterX;
+        float deltaY = playerCenterY - obstacleCenterY;
+
+        // Calculate the minimum distances for no overlap
+        float minDistanceX = playerHalfWidth + obstacleHalfWidth;
+        float minDistanceY = playerHalfHeight + obstacleHalfHeight;
+
+        // If the player is closer to the obstacle in both dimensions, there's a collision
+        if (std::abs(deltaX) < minDistanceX && std::abs(deltaY) < minDistanceY) {
+            // Calculate the overlap in both dimensions
+            float overlapX = minDistanceX - std::abs(deltaX);
+            float overlapY = minDistanceY - std::abs(deltaY);
+
+            // Push the player away from the obstacle based on the overlap
+            if (overlapX < overlapY) {
+                // X-axis collision, resolve horizontally
+                if (deltaX < 0) {
+                    mPlayer.position.x -= overlapX;
+                } else {
+                    mPlayer.position.x += overlapX;
+                }
+            } else {
+                // Y-axis collision, resolve vertically
+                if (deltaY < 0) {
+                    mPlayer.position.y -= overlapY;
+                } else {
+                    mPlayer.position.y += overlapY;
+                }
+            }
+
+            // Update the player's rect to match the new position
+            mPlayer.rect.x = static_cast<int>(mPlayer.position.x);
+            mPlayer.rect.y = static_cast<int>(mPlayer.position.y);
+        }
+    }
+
+    //UpdateObstacles(); // Add this line to update obstacles
 
     // Update the time left
     mTimeLeft = std::max(0, mTimeLimit - static_cast<int>(elapsedTime));
@@ -238,7 +311,19 @@ void Game::UpdateGame() {
         int x = rand() % SCREEN_WIDTH;
         int y = rand() % SCREEN_HEIGHT;
         SDL_Rect objectRect = {x, y, 20, 20};
-        mObjects.push_back(objectRect);
+        
+        // Check if the new figure overlaps with any obstacle
+        bool overlapsWithObstacle = false;
+        for (const auto& obstacle : mObstacles) {
+            if (SDL_HasIntersection(&objectRect, &obstacle)) {
+                overlapsWithObstacle = true;
+                break; // No need to check further, we know it overlaps
+            }
+        }
+        if (!overlapsWithObstacle) {
+            // No overlap with obstacles, so add it to mObjects
+            mObjects.push_back(objectRect);
+        }
 
         // Update the last spawn time
         mLastObjectSpawnTime = mCurrentTime;
@@ -250,13 +335,18 @@ void Game::GenerateOutput() {
     SDL_RenderClear(mRenderer);
 
     // Render player
-    SDL_SetRenderDrawColor(mRenderer, 255, 0, 0, 255); // Red color
+    SDL_SetRenderDrawColor(mRenderer, 255, 0, 0, 255); // Red color - for player
     SDL_RenderFillRect(mRenderer, &mPlayer.rect);
 
     // Render objects
-    SDL_SetRenderDrawColor(mRenderer, 0, 255, 0, 255); // Green color
+    SDL_SetRenderDrawColor(mRenderer, 0, 255, 0, 255); // Green color - for figures
     for (const auto& objectRect : mObjects) {
         SDL_RenderFillRect(mRenderer, &objectRect);
+    }
+    
+    SDL_SetRenderDrawColor(mRenderer, 255, 255, 255, 255); // White color - for obstacles
+    for (const auto& obstacle : mObstacles) {
+        SDL_RenderFillRect(mRenderer, &obstacle);
     }
 
     SDL_RenderPresent(mRenderer);
@@ -299,3 +389,4 @@ int main() {
     delete myGame;
     return 0;
 }
+
