@@ -10,6 +10,7 @@ const int SCREEN_HEIGHT = 480;
 struct Vector2 {
     float x;
     float y;
+    float z;
 };
 
 class Player {
@@ -155,12 +156,12 @@ void Game::GameOver(bool win) {
     if (win) {
         std::cout << "Congratulations! You won!" << std::endl;
     } else {
-        std::cout << "Game Over! You lost!" << std::endl;
+        std::cout << "You have only eaten " << eatenFigues << "/" << mTimeLimit << "." << std::endl;
+        std::cout << "Game Over! You lost!\n" << std::endl;
     }
 
     mIsRunning = false;
 }
-
 
 void Game::ProcessInput() {
     SDL_Event event;
@@ -291,9 +292,10 @@ void Game::RunLoop() {
 }
 
 int main() {
-    Game myGame;
-    if (myGame.Initialize()) {
-        myGame.RunLoop();
+    Game* myGame = new Game();
+    if (myGame->Initialize()) {
+        myGame->RunLoop();
     }
+    delete myGame;
     return 0;
 }
