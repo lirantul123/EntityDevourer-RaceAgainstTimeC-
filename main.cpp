@@ -5,11 +5,13 @@
 #define SLEEP(x) std::this_thread::sleep_for(std::chrono::seconds(x))
 
 int main() {
-    Game* myGame = (Game*)malloc(sizeof(Game));
+    
+    std::unique_ptr<Game> myGame = std::make_unique<Game>();
+    
     if (myGame->Initialize()) {
         myGame->RunLoop();
     }
-    delete myGame;
+    
     return 0;
 }
 
